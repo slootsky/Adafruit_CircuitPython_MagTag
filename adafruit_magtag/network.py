@@ -176,7 +176,9 @@ class Network:
                 "\n\nOur time service requires a login/password to rate-limit. Please register for a free adafruit.io account and place the user/key in your secrets file under 'aio_username' and 'aio_key'"  # pylint: disable=line-too-long
             ) from KeyError
 
-        location = secrets.get("timezone", location)
+        if location is None:
+            location = secrets.get("timezone", location)
+
         if location:
             print("Getting time for timezone", location)
             api_url = (TIME_SERVICE + "&tz=%s") % (aio_username, aio_key, location)
@@ -293,16 +295,32 @@ class Network:
         self._wifi.neo_status(STATUS_CONNECTING)
         while not self._wifi.is_connected:
             # secrets dictionary must contain 'ssid' and 'password' at a minimum
-            print("Connecting to AP", secrets["ssid"])
-            if secrets["ssid"] == "CHANGE ME" or secrets["password"] == "CHANGE ME":
-                change_me = "\n" + "*" * 45
-                change_me += "\nPlease update the 'secrets.py' file on your\n"
-                change_me += "CIRCUITPY drive to include your local WiFi\n"
-                change_me += "access point SSID name in 'ssid' and SSID\n"
-                change_me += "password in 'password'. Then save to reload!\n"
-                change_me += "*" * 45
-                raise OSError(change_me)
+            if "ssid" in secrets:
+                if isinstance(secrets["ssid"], (list, tuple)):
+                    print(
+                        'secrets["ssid"] is a list or a tuple.  I assume you know what you\'re doing'
+                    )
+                else:
+		            print("Connecting to AP", secrets["ssid"])
+		            if secrets["ssid"] == "CHANGE ME" or secrets["password"] == "CHANGE ME":
+		                change_me = "\n" + "*" * 45
+		                change_me += "\nPlease update the 'secrets.py' file on your\n"
+		                change_me += "CIRCUITPY drive to include your local WiFi\n"
+		                change_me += "access point SSID name in 'ssid' and SSID\n"
+		                change_me += "password in 'password'. Then save to reload!\n"
+		                change_me += "*" * 45
+		                raise OSError(change_me)
             self._wifi.neo_status(STATUS_NO_CONNECTION)  # red = not connected
+            if isinstance(secrets["ssid"], (list, tuple)):
+                for ssidpass in zip(secrets["ssid"],secrets["password"]):
+                    try:
+                        self._wifi.connect(ssidpass[0],ssidpass[1])
+                        self.requests = self._wifi.requests
+                    except RuntimeError as error:
+                        print("Could not connect to AP "+ssidpass[0], error)
+                if not self._wifi.is_connected:
+                    print("Retrying in 3 seconds...")
+                    time.sleep(3)
             try:
                 self._wifi.connect(secrets["ssid"], secrets["password"])
                 self.requests = self._wifi.requests
